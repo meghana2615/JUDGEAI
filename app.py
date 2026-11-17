@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
 from database import init_db, create_user, authenticate_user, save_evaluation, get_history, delete_evaluation, update_profile, update_preferences, get_user
-from judge import evaluate_answer, generate_answer, run_consistency_test, detect_failures, ollama_status
+from judge import evaluate_answer, generate_answer, run_consistency_test, detect_failures, groq_status
 
 st.set_page_config(page_title="JUDGEAI | Evaluation Intelligence", page_icon="⚖️", layout="wide", initial_sidebar_state="expanded")
 init_db()
@@ -284,8 +284,8 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    online, engine_msg = ollama_status()
-
+    online, engine_msg = groq_status()
+    
     st.markdown(
         f'<div class="panel"><div style="color:{"#35D6A0" if online else "#F6B94A"};font-weight:700;font-size:11px">● {"ENGINE ONLINE" if online else "ENGINE OFFLINE"}</div><div class="smallmuted">{engine_msg}</div></div>',
         unsafe_allow_html=True
@@ -506,9 +506,10 @@ if page=="Dashboard":
 
     q2.markdown(
         '<div class="panel"><b>Model arena</b>'
-        '<p class="smallmuted">Compare responses from multiple local models.</p></div>',
+        '<p class="smallmuted">Compare responses from multiple Groq models.</p></div>',
         unsafe_allow_html=True
     )
+
 
     q3.markdown(
         '<div class="panel"><b>Benchmark lab</b>'
@@ -562,8 +563,8 @@ elif page=="Evaluate Answer":
 
 
 elif page=="Model Arena":
-    page_header("03 / MODEL INTELLIGENCE","Model Arena","Generate and compare answers from two Ollama models using the same evaluation rubric.")
-    models=st.text_input("Ollama model names, comma separated","llama3.2:3b, gemma3:1b")
+    page_header("03 / MODEL INTELLIGENCE","Model Arena","Generate and compare answers from two Groq models using the same evaluation rubric.")
+    models=st.text_input("Groq model names, comma separated","openai/gpt-oss-120b, openai/gpt-oss-20b")
     question=st.text_area("Test prompt",height=130)
     if st.button("Launch model comparison",type="primary",use_container_width=True):
         chosen=[x.strip() for x in models.split(",") if x.strip()][:4]
@@ -911,42 +912,99 @@ elif page=="Dataset Lab":
                 st.download_button("Download dataset evaluation report",st.session_state.dataset_output.to_csv(index=False).encode(),file_name="judgeai_dataset_report.csv")
         except Exception as e: st.error(f"Could not read CSV: {e}")
 
+
 elif page=="Benchmark Lab":
-    page_header("09 / CONTROLLED BENCHMARKING","Benchmark Lab","Compare selected models against the same set of test questions.")
+    page_header("09 / CONTROLLED BENCHMARKING","Benchmark Lab","Compare selected Groq models against the same set of test questions.")
+
     file=st.file_uploader(
-    "Upload CSV with a question column",
-    type=["csv"],
-    key="dataset_csv",
-    label_visibility="collapsed"
-    )    
-    models=st.text_input("Models to benchmark","llama3.2:3b, gemma3:1b")
+        "Upload CSV with a question column",
+        type=["csv"],
+        key="dataset_csv",
+        label_visibility="collapsed"
+    )
+
+    models=st.text_input(
+        "Groq models to benchmark (comma-separated)",
+        "openai/gpt-oss-120b, openai/gpt-oss-20b"
+    )
+
     if file:
-        data=pd.read_csv(file); st.dataframe(data.head(8),use_container_width=True)
-        if "question" not in data.columns: st.error("CSV must include a question column.")
+        data=pd.read_csv(file)
+        st.dataframe(data.head(8),use_container_width=True)
+
+        if "question" not in data.columns:
+            st.error("CSV must include a question column.")
+
         elif st.button("Start benchmark",type="primary"):
-            chosen=list(dict.fromkeys(m.strip() for m in models.split(",") if m.strip()))[:4]
-            if not chosen: st.warning("Enter at least one Ollama model name.")
-            elif data.empty: st.warning("The uploaded CSV has no test questions.")
+            chosen=list(dict.fromkeys(
+                m.strip() for m in models.split(",") if m.strip()
+            ))[:4]
+
+            if not chosen:
+                st.warning("Enter at least one Groq model name.")
+
+            elif data.empty:
+                st.warning("The uploaded CSV has no test questions.")
+
             else:
-                out=[]; tasks=len(data)*len(chosen); done=0; bar=st.progress(0)
+                out=[]
+                tasks=len(data)*len(chosen)
+                done=0
+                bar=st.progress(0)
+
                 for m in chosen:
                     for _,r in data.iterrows():
                         try:
-                            ans=generate_answer(str(r["question"]),m); res=apply_rubric_weights(evaluate_answer(str(r["question"]),ans),weights)
-                            save_evaluation(user["id"],str(r["question"]),ans,res,m)
-                            out.append({"Model":m,"Question":r["question"],"Answer":ans,**res})
-                        except Exception as e: out.append({"Model":m,"Question":r["question"],"Error":str(e)})
-                        done+=1; bar.progress(done/tasks)
+                            ans=generate_answer(str(r["question"]),m)
+                            res=apply_rubric_weights(
+                                evaluate_answer(str(r["question"]),ans),
+                                weights
+                            )
+
+                            save_evaluation(
+                                user["id"],
+                                str(r["question"]),
+                                ans,
+                                res,
+                                m
+                            )
+
+                            out.append({
+                                "Model":m,
+                                "Question":r["question"],
+                                "Answer":ans,
+                                **res
+                            })
+
+                        except Exception as e:
+                            out.append({
+                                "Model":m,
+                                "Question":r["question"],
+                                "Error":str(e)
+                            })
+
+                        done+=1
+                        bar.progress(done/tasks)
+
                 st.session_state.benchmark_output=pd.DataFrame(out)
+
     if "benchmark_output" in st.session_state:
-        out=st.session_state.benchmark_output; st.dataframe(out,use_container_width=True)
+        out=st.session_state.benchmark_output
+        st.dataframe(out,use_container_width=True)
+
         if "overall_score" in out.columns:
             st.subheader("Model score summary")
             valid=out.dropna(subset=["overall_score"])
+
             if not valid.empty:
                 summary=valid.groupby("Model")["overall_score"].mean().round(2).reset_index()
                 st.dataframe(summary,use_container_width=True)
-        st.download_button("Download benchmark report",out.to_csv(index=False).encode(),file_name="judgeai_benchmark_report.csv")
+
+        st.download_button(
+            "Download benchmark report",
+            out.to_csv(index=False).encode(),
+            file_name="judgeai_benchmark_report.csv"
+        )
 
 elif page=="Settings":
     page_header("11 / PERSONAL WORKSPACE","Your Workspace","Make JUDGEAI feel like your own evaluation command centre. Your identity, visual accent, goals and scoring rubric are saved to your account.")
