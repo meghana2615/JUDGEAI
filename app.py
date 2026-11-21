@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
-from database import init_db, create_user, authenticate_user, save_evaluation, get_history, delete_evaluation, update_profile, update_preferences, get_user
+from database import get_user_db, init_db, create_user, authenticate_user, save_evaluation, get_history, delete_evaluation, update_profile, update_preferences, get_user
 from judge import evaluate_answer, generate_answer, run_consistency_test, detect_failures, groq_status
 
 st.set_page_config(page_title="JUDGEAI | Evaluation Intelligence", page_icon="⚖️", layout="wide", initial_sidebar_state="expanded")
@@ -144,6 +144,7 @@ def chart_theme(fig, height=340):
     return fig
 
 
+
 def auth_screen():
     with st.container(key="auth_card"):
         st.markdown("""
@@ -169,6 +170,7 @@ def auth_screen():
                 key="login_identity",
                 placeholder="you@example.com"
             )
+
             password = st.text_input(
                 "Password",
                 type="password",
@@ -177,13 +179,17 @@ def auth_screen():
 
             if st.button("Sign in to JUDGEAI", use_container_width=True):
                 user = authenticate_user(login, password)
+
                 if user:
                     st.session_state.user_id = user["id"]
                     st.session_state.username = user["username"]
                     st.session_state.email = user["email"]
                     st.rerun()
                 else:
-                    st.error("Login failed. Check your username/email and password.")
+                    st.error(
+                        "Login failed. Check your username/email and password. "
+                        "If you just registered, verify your email first."
+                    )
 
         with tab2:
             username = st.text_input(
@@ -191,16 +197,19 @@ def auth_screen():
                 key="reg_username",
                 placeholder="Choose a username"
             )
+
             email = st.text_input(
                 "Email address",
                 key="reg_email",
                 placeholder="you@example.com"
             )
+
             p1 = st.text_input(
                 "Password",
                 type="password",
                 key="reg_password"
             )
+
             p2 = st.text_input(
                 "Confirm password",
                 type="password",
@@ -210,39 +219,72 @@ def auth_screen():
             if st.button("Create secure account", use_container_width=True):
                 if not username.strip() or not email.strip() or not p1:
                     st.error("Complete all fields.")
-                elif not re.fullmatch(r"[A-Za-z0-9_.-]{3,32}", username.strip()):
-                    st.error("Username must be 3–32 characters using letters, numbers, dots, underscores or hyphens.")
-                elif not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+
+                elif not re.fullmatch(
+                    r"[A-Za-z0-9_.-]{3,32}", username.strip()
+                ):
+                    st.error(
+                        "Username must be 3–32 characters using letters, "
+                        "numbers, dots, underscores or hyphens."
+                    )
+
+                elif not re.fullmatch(
+                    r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()
+                ):
                     st.error("Enter a valid email address.")
+
                 elif not 8 <= len(p1) <= 128:
                     st.error("Use a password between 8 and 128 characters.")
+
                 elif p1 != p2:
                     st.error("Passwords do not match.")
+
                 else:
                     ok, msg = create_user(
                         username.strip(),
                         email.strip().lower(),
                         p1
                     )
+
                     if ok:
-                        st.success("Account created. Sign in using your username or email.")
+                        st.success(msg)
+                        st.info(
+                            "Open your email inbox, verify your address, "
+                            "then return here and sign in."
+                        )
                     else:
                         st.error(msg)
 
         st.caption(
-            "Private workspace · Passwords are stored as salted PBKDF2 hashes · "
-            "Evaluation records are scoped to your account"
+            "Secure authentication · Email verification required · "
+            "Your evaluation records are protected by account-level access policies"
         )
 
 
-if "user_id" not in st.session_state:
+if (
+    "user_id" not in st.session_state
+    or "auth_access_token" not in st.session_state
+    or "auth_refresh_token" not in st.session_state
+    or "auth_user_uuid" not in st.session_state
+):
     auth_screen()
     st.stop()
 
-user=get_user(st.session_state.user_id)
+user = get_user(st.session_state.user_id)
+
 if not user:
-    for key in ["user_id","username","email"]: st.session_state.pop(key,None)
+    for key in [
+        "user_id",
+        "username",
+        "email",
+        "auth_access_token",
+        "auth_refresh_token",
+        "auth_user_uuid"
+    ]:
+        st.session_state.pop(key, None)
+
     st.rerun()
+
 
 weights={k:float(user.get(k+"_weight",25) or 25) for k in ["accuracy","relevance","clarity","completeness"]}
 user_accent=user.get("accent_color") or PURPLE
@@ -296,10 +338,18 @@ with st.sidebar:
     st.markdown(f"**{user.get('display_name') or user['username']}**")
     st.caption(f"{user.get('role') or 'AI Quality Analyst'} · {user['email']}")
 
+    
     if st.button("Log out", use_container_width=True):
+        try:
+            get_user_db().auth.sign_out()
+        except Exception:
+            pass
+
         for key in list(st.session_state.keys()):
             del st.session_state[key]
+
         st.rerun()
+
 
 history=get_history(user["id"])
 cols=["ID","Question","Answer","Accuracy","Relevance","Clarity","Completeness","Overall Score","Strengths","Weaknesses","Improvements","Verdict","Date","Model"]
@@ -1023,13 +1073,38 @@ elif page=="Settings":
             weekly_goal=st.number_input("Weekly evaluation goal",min_value=1,max_value=500,value=int(user.get("weekly_goal") or 20))
             bio=st.text_area("Short workspace bio",value=user.get("bio") or "",max_chars=240,placeholder="What are you evaluating? What quality standard matters to you?")
         save_profile=st.form_submit_button("Save personal workspace",type="primary",use_container_width=True)
+        
         if save_profile:
-            ok,msg=update_profile(user["id"],email_new)
-            if ok:
-                ok2,msg2=update_preferences(user["id"],display_name,role,bio,accent_options[accent_label],weekly_goal,weights["accuracy"],weights["relevance"],weights["clarity"],weights["completeness"])
-                if ok2: st.success("Workspace profile saved."); st.rerun()
-                else: st.error(msg2)
-            else: st.error(msg)
+            email_changed = email_new.strip().lower() != user["email"].lower()
+
+            ok2, msg2 = update_preferences(
+                user["id"],
+                display_name,
+                role,
+                bio,
+                accent_options[accent_label],
+                weekly_goal,
+                weights["accuracy"],
+                weights["relevance"],
+                weights["clarity"],
+                weights["completeness"]
+            )
+
+            if not ok2:
+                st.error(msg2)
+            else:
+                if email_changed:
+                    ok, msg = update_profile(user["id"], email_new)
+
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+                else:
+                    st.success("Workspace profile saved.")
+
+                st.rerun()
+        
     st.divider()
     st.subheader("Personal evaluation rubric")
     st.caption("Choose how much each quality dimension contributes to your overall score. Weights are normalized automatically.")
@@ -1046,5 +1121,5 @@ elif page=="Settings":
             ok,msg=update_preferences(user["id"],user.get("display_name") or user["username"],user.get("role") or "AI Quality Analyst",user.get("bio") or "",user.get("accent_color") or "#8B5CF6",int(user.get("weekly_goal") or 20),wa,wr,wc,wco)
             if ok: st.success("Your weighted rubric is saved. New evaluations will use it."); st.rerun()
             else: st.error(msg)
-    st.info("Security: passwords are stored as salted PBKDF2 hashes. Username and email are unique login identifiers. Email verification and password-reset emails require a configured email provider and are not enabled in this local build.")
+    st.info("Security: Authentication is managed by Supabase Auth. Email verification is required for new accounts, and database access is protected using Row Level Security (RLS).")
     st.caption("JUDGEAI · YOUR RUBRIC · YOUR SIGNAL · YOUR INTELLIGENCE")

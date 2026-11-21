@@ -54,8 +54,6 @@ def ollama_status():
 
 _client_instance = None
 
-
-
 def _client():
     global _client_instance
 
