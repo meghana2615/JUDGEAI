@@ -1,65 +1,67 @@
 # JUDGEAI
 ### AI Response Intelligence & Quality Evaluation Platform
 
-JUDGEAI is an AI-powered web application designed to evaluate, analyze and compare AI-generated responses. It provides a structured environment for assessing response quality, identifying potential weaknesses, benchmarking language models and visualizing evaluation performance.
+JUDGEAI is an AI-powered web application designed to evaluate, analyze and improve AI-generated responses. It provides a structured environment for assessing response quality, identifying weaknesses, monitoring evaluation performance and generating actionable improvement suggestions.
 
-Built using Python, Streamlit, SQLite and Ollama, JUDGEAI combines AI-powered evaluation with interactive analytics and personalized workspaces.
+Built using Python, Streamlit, Groq and Supabase, JUDGEAI combines AI-powered response evaluation with interactive analytics, secure authentication and personalized user workspaces.
 
 ---
 
 ## Project Overview
 
-Evaluating AI-generated responses involves more than checking whether an answer looks correct. Response quality also depends on relevance, clarity, completeness and consistency.
+Evaluating AI-generated responses involves more than checking whether an answer looks correct. Response quality also depends on accuracy, relevance, clarity and completeness.
 
-JUDGEAI addresses this by providing a multi-dimensional evaluation platform where users can assess answers, compare language models and monitor quality trends through interactive dashboards.
+JUDGEAI addresses this through a multi-dimensional evaluation platform where users can assess answers, analyze evaluation results and monitor quality trends through interactive dashboards.
 
 ## Key Features
 
-### AI Response Evaluation
+### 1. AI Response Evaluation
 - Evaluates responses across Accuracy, Relevance, Clarity and Completeness.
 - Generates overall quality scores.
-- Identifies strengths and weaknesses.
+- Identifies response strengths and weaknesses.
 - Provides suggestions for improving responses.
 - Supports customizable weighted evaluation rubrics.
 
-### Model Arena
-- Integrates locally hosted language models through Ollama.
-- Generates answers using different AI models.
-- Supports two-to-four-model comparisons.
-- Helps analyze differences in response quality.
+### 2. AI-Powered Answer Generation
+- Generates answers using the Groq API.
+- Uses the GPT-OSS 120B model by default.
+- Provides clear and contextually relevant responses.
+- Integrates answer generation with the evaluation workflow.
 
-### Judge Consistency
+### 3. Judge Consistency
 - Performs repeated evaluation tests.
 - Calculates mean, score range and standard deviation.
 - Analyzes consistency across repeated judgments.
 
-### Failure & Risk Detection
+### 4. Failure & Risk Detection
 - Identifies potentially weak responses using score thresholds.
 - Highlights low-performing evaluation dimensions.
 - Helps identify areas requiring improvement.
 
-### Interactive Analytics
+### 5. Interactive Analytics
 - Evaluation score distributions and quality trends.
 - Rolling quality averages.
-- Filterable model comparisons.
+- Model-related evaluation analytics, where supported.
 - Rubric radar diagnostics.
-- Date-based model behaviour replay.
+- Date-based evaluation analysis.
 - Downloadable filtered analytics.
 
-### Insight Studio
+### 6. Insight Studio
 - Personal quality fingerprint.
 - Weekly evaluation goals.
 - Recent evaluation momentum.
 - Personalized improvement priorities.
 
-### Dataset & Benchmark Labs
+### 7. Dataset & Benchmark Labs
 - CSV-based answer dataset evaluation.
-- Question-based model benchmarking.
+- Question-based benchmarking.
 - Interactive result tables and analytics.
 
-### User Authentication & Personalization
-- Account registration and login using username or email.
-- Salted PBKDF2-HMAC-SHA256 password hashing.
+### 8. User Authentication & Personalization
+- Account registration using username and email.
+- Login using username or email.
+- Supabase-powered authentication.
+- Email verification.
 - User-specific evaluation history.
 - Personalized workspace settings.
 - Custom profile information and accent colours.
@@ -71,20 +73,21 @@ JUDGEAI addresses this by providing a multi-dimensional evaluation platform wher
 | Technology | Application |
 |---|---|
 | Python | Core application development |
-| Streamlit | Web application interface |
-| SQLite | User and evaluation data storage |
-| Ollama | Local AI model integration |
-| Llama 3.2 | Default evaluation model |
-| Gemma 3 | Optional answer-generation model |
+| Streamlit | Interactive web application |
+| Supabase | Authentication and backend services |
+| PostgreSQL | Persistent database storage |
+| Groq API | Hosted AI inference |
+| GPT-OSS 120B | Default AI evaluation and answer-generation model |
 | Pandas | Data processing |
 | Plotly | Interactive data visualization |
+| Requests | HTTP communication |
 
 ---
 
 ## Application Structure
 
 - `app.py` – Main application interface, navigation, authentication and dashboards.
-- `database.py` – Database operations, user authentication and evaluation storage.
+- `database.py` – Supabase database operations, authentication and evaluation storage.
 - `judge.py` – AI evaluation, answer generation, consistency testing and failure detection.
 - `requirements.txt` – Python dependencies.
 - `sample_dataset.csv` – Sample dataset for testing.
@@ -106,38 +109,114 @@ Users can customize the importance of these dimensions through weighted evaluati
 
 ## Authentication & Data Security
 
-- Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes.
-- Usernames and email addresses are unique.
-- Evaluation records are associated with authenticated user accounts.
-- Users can access and manage their own evaluation history.
-
-Email verification and password-reset emails are not currently implemented.
-
----
-
-## Local AI Integration
-
-JUDGEAI uses Ollama to run language models locally.
-
-Supported example models:
-- `llama3.2:3b`
-- `gemma3:1b`
-
-The default evaluation model is `llama3.2:3b`. Additional answer-generation models can be configured for comparison.
+- Supabase Authentication manages user authentication.
+- Email verification is part of the registration process.
+- User profiles are linked to authenticated accounts.
+- Evaluation records are associated with individual user accounts.
+- Row Level Security (RLS) policies help restrict access to individual users' records.
+- Sensitive configuration values are stored outside the public source code.
 
 ---
 
-## Deployment Note
+## AI Integration
 
-The current application is designed for local execution using Ollama. Public cloud deployment requires a securely accessible hosted inference service or model API, along with persistent database storage and appropriate security configuration.
+JUDGEAI uses the Groq API to access hosted language models for answer generation and response evaluation.
+
+**Default AI model:**
+- `openai/gpt-oss-120b`
+
+The application uses the Groq Chat Completions API to generate responses and evaluate them according to the configured evaluation rubric.
+
+---
+
+## Installation & Local Setup
+
+### Prerequisites
+
+- Python 3.10 or later
+- Git
+- A Supabase project
+- A Groq API key
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/meghana2615/JUDGEAI.git
+cd JUDGEAI
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+### 3. Activate the virtual environment
+
+**Windows:**
+
+```powershell
+.venv\Scripts\activate
+```
+
+### 4. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 5. Configure application secrets
+
+Create a file named `secrets.toml` inside the `.streamlit` folder.
+
+Add the required configuration values:
+
+```toml
+SUPABASE_URL = "your_supabase_project_url"
+SUPABASE_KEY = "your_supabase_service_role_key"
+SUPABASE_PUBLISHABLE_KEY = "your_supabase_publishable_key"
+GROQ_API_KEY = "your_groq_api_key"
+```
+
+**Important:** Never upload `secrets.toml`, API keys or service-role credentials to GitHub.
+
+### 6. Run the application
+
+```bash
+streamlit run app.py
+```
+
+The application will open in your browser.
+
+---
+
+## Deployment
+
+JUDGEAI is designed for cloud deployment using:
+
+- **Streamlit Community Cloud** – Application hosting.
+- **Supabase** – Authentication and persistent database services.
+- **Groq API** – Hosted AI inference.
+
+This architecture allows the application to run without requiring users to install or host local language models.
 
 ---
 
 ## Project Objective
 
-The objective of JUDGEAI is to provide an organized and interactive environment for understanding AI response quality, comparing language models and analyzing evaluation consistency.
+The objective of JUDGEAI is to provide an organized and interactive environment for understanding AI response quality, identifying weaknesses and analyzing evaluation consistency.
 
-It brings response evaluation, model benchmarking, failure detection and analytical insights together in a single platform.
+It brings AI response evaluation, quality analysis, failure detection and analytical insights together in a single platform.
+
+---
+
+## Future Enhancements
+
+- Support for additional language models.
+- Expanded model benchmarking capabilities.
+- Advanced evaluation metrics.
+- Improved explainability of AI judgments.
+- Additional dataset analysis capabilities.
 
 ---
 
@@ -145,4 +224,4 @@ It brings response evaluation, model benchmarking, failure detection and analyti
 
 **Chereddy Meghana**
 
-AI Response Intelligence & Quality Evaluation Platform
+*AI Response Intelligence & Quality Evaluation Platform*
